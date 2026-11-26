@@ -164,7 +164,9 @@ export class Game {
       if (Math.min(told < 3.5 && seen < 25 ? 0 : Infinity, seen) > 6.5) return;
       b.respawnAt = this.time + 4.5;
       this.emit({ t: 'box', i: e.i, on: 0, k: k.id });
-      if (!k.weapon && k.roll <= 0) this.emit({ t: 'give', k: k.id, w: rollWeapon() });
+      // l'état d'arme fait foi chez le propriétaire du kart (l'hôte ne voit pas toujours ses munitions à jour)
+      const armed = k.isLocal ? (k.weapon || k.roll > 0) : !!e.armed;
+      if (!armed) this.emit({ t: 'give', k: k.id, w: rollWeapon() });
     }
   }
 
@@ -173,6 +175,8 @@ export class Game {
     switch (e.t) {
       case 'fire': {
         const k = K(e.k); if (!k) return;
+        // copie distante : on suit aussi les munitions pour que tout le monde soit d'accord
+        if (!k.isLocal && k.weapon === e.w) { k.ammo--; if (k.ammo <= 0) { k.weapon = null; k.ammo = 0; } }
         for (const s of e.s) {
           if (s.ty === 'laser') this.doLaser(k, s);
           else if (!this.projectiles.has(s.id)) this.projectiles.set(s.id, new Projectile(this, s, k.id));
@@ -625,7 +629,7 @@ export class Game {
       if (!k.isLocal || k.dead) continue;
       for (const b of this.boxes) {
         if (!b.active || b.pending > this.time) continue;
-        if (Math.hypot(k.pos.x - b.pos.x, k.pos.y + 0.9 - b.pos.y, k.pos.z - b.pos.z) < 2.3) { b.pending = this.time + 0.5; this.request({ t: 'pick', k: k.id, i: b.i, x: +k.pos.x.toFixed(2), y: +k.pos.y.toFixed(2), z: +k.pos.z.toFixed(2) }); }
+        if (Math.hypot(k.pos.x - b.pos.x, k.pos.y + 0.9 - b.pos.y, k.pos.z - b.pos.z) < 2.3) { b.pending = this.time + 0.5; this.request({ t: 'pick', k: k.id, i: b.i, armed: k.weapon || k.roll > 0 ? 1 : 0, x: +k.pos.x.toFixed(2), y: +k.pos.y.toFixed(2), z: +k.pos.z.toFixed(2) }); }
       }
     }
   }

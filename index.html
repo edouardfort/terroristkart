@@ -187,7 +187,15 @@ input[type=range].focus { outline: 4px solid var(--yellow); border-radius: 8px; 
 #loading.gone { opacity: 0; pointer-events: none; }
 
 /* ================= HUD ================= */
-#hud { position: fixed; inset: 0; pointer-events: none; display: none; font-family: var(--display); }
+#hud { position: fixed; inset: 0; pointer-events: none; display: none; font-family: var(--display); z-index: 4; }
+.snd { position: relative; pointer-events: auto; }
+.snd-btn { width: 44px; height: 44px; border-radius: 50%; border: 3px solid #fff; background: linear-gradient(180deg, #6aa6ff, #3b7cf0); box-shadow: 0 4px 0 rgba(20,40,140,.5); font-size: 20px; cursor: pointer; display: grid; place-items: center; padding: 0; }
+.snd-btn.muted { background: linear-gradient(180deg, #8d93a8, #5d6380); }
+.snd-pop { position: absolute; top: 54px; left: 50%; transform: translateX(-50%); width: 210px; padding: 12px; display: none; flex-direction: column; gap: 8px; background: rgba(27,20,64,.88); border: 3px solid #fff; border-radius: 16px; font-family: var(--text); font-weight: 700; font-size: 14px; }
+.snd.open .snd-pop { display: flex; }
+.snd-pop label { display: flex; flex-direction: column; gap: 2px; }
+.pause-vol { display: grid; grid-template-columns: auto 220px; gap: 8px 14px; align-items: center; padding: 12px 18px; font-family: var(--display); font-size: 18px; }
+#p-mute { grid-column: 1 / -1; }
 #hud.on { display: block; }
 .vp { position: absolute; overflow: hidden; }
 .vp + .vp { box-shadow: inset 0 0 0 2px rgba(27,20,64,.8); }
@@ -275,8 +283,9 @@ input[type=range].focus { outline: 4px solid var(--yellow); border-radius: 8px; 
 @media (max-height: 760px) { .btn.big { font-size: 30px; padding: 10px 30px; } .slot-card { height: 180px; } .menu-main { gap: 12px; bottom: 4vh; } }
 
 /* ================= COMMANDES TACTILES ================= */
-#touch { position: fixed; inset: 0; display: none; z-index: 3; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+#touch { position: fixed; inset: 0; display: none; z-index: 3; pointer-events: none; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 #touch.on { display: block; }
+.t-zone, .t-btn { pointer-events: auto; }
 .t-zone { position: absolute; left: 0; top: 28%; bottom: 0; width: 50%; touch-action: none; }
 .t-base { position: absolute; left: calc(110px + env(safe-area-inset-left, 0px)); top: calc(100% - 110px); width: 132px; height: 132px; margin: -66px 0 0 -66px; border-radius: 50%;
   background: radial-gradient(circle, rgba(27,20,64,.18), rgba(27,20,64,.35)); border: 4px solid rgba(255,255,255,.55); opacity: .55; transition: opacity .15s; pointer-events: none; }
@@ -462,6 +471,9 @@ body.touch-play .vp .tl { left: calc(16px + env(safe-area-inset-left, 0px)); }
   <section id="s-pause" class="screen">
     <h2>PAUSE</h2>
     <button class="btn big green" id="b-resume" data-nav>REPRENDRE</button>
+    <div class="pause-vol card"><span>Musique</span><input type="range" id="p-music" min="0" max="1" step="0.05" data-nav>
+      <span>Effets</span><input type="range" id="p-sfx" min="0" max="1" step="0.05" data-nav>
+      <button class="btn small blue" id="p-mute" data-nav>🔇 Couper le son</button></div>
     <button class="btn big red" id="b-quit" data-nav>QUITTER LA PARTIE</button>
   </section>
 </div>
