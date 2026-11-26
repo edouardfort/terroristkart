@@ -209,10 +209,9 @@ let lastVol = { music: 0.5, sfx: 0.8 };
 function setVol(music, sfx) {
   S.music = Math.max(0, Math.min(1, music)); S.sfx = Math.max(0, Math.min(1, sfx));
   audio.setVolumes(S.music, S.sfx); save();
-  for (const id of ['#o-music', '#p-music', '#g-music']) { const e = $(id); if (e) e.value = S.music; }
-  for (const id of ['#o-sfx', '#p-sfx', '#g-sfx']) { const e = $(id); if (e) e.value = S.sfx; }
+  for (const id of ['#o-music', '#p-music']) { const e = $(id); if (e) e.value = S.music; }
+  for (const id of ['#o-sfx', '#p-sfx']) { const e = $(id); if (e) e.value = S.sfx; }
   const muted = S.music === 0 && S.sfx === 0;
-  $$('.snd-btn').forEach(b => { b.classList.toggle('muted', muted); b.textContent = muted ? '🔇' : S.sfx + S.music < 0.6 ? '🔉' : '🔊'; });
   const pm = $('#p-mute'); if (pm) pm.textContent = muted ? '🔊 Remettre le son' : '🔇 Couper le son';
 }
 function toggleMute() {
@@ -229,22 +228,6 @@ $('#p-mute').addEventListener('click', toggleMute);
 addEventListener('keydown', e => { if (e.code === 'KeyM' && game && !(e.target && e.target.tagName === 'INPUT')) toggleMute(); });
 setVol(S.music, S.sfx);
 
-// Bouton son dans le HUD (premier écran)
-function addSoundControl() {
-  const tc = $('#hud .vp .tc'); if (!tc) return;
-  const box = document.createElement('div'); box.className = 'snd';
-  box.innerHTML = '<button class="snd-btn" type="button" aria-label="Volume">🔊</button>'
-    + '<div class="snd-pop"><label>Musique<input type="range" id="g-music" min="0" max="1" step="0.05"></label>'
-    + '<label>Effets<input type="range" id="g-sfx" min="0" max="1" step="0.05"></label>'
-    + '<button class="btn tiny blue" type="button" id="g-mute">Couper / remettre (M)</button></div>';
-  tc.appendChild(box);
-  box.querySelector('.snd-btn').addEventListener('click', e => { e.stopPropagation(); box.classList.toggle('open'); audio.init(); });
-  bindVol('#g-music', '#g-sfx');
-  $('#g-mute').addEventListener('click', toggleMute);
-  ['pointerdown', 'mousedown', 'touchstart'].forEach(t => box.addEventListener(t, e => e.stopPropagation()));
-  setVol(S.music, S.sfx);
-}
-document.addEventListener('pointerdown', () => { const b = $('#hud .snd.open'); if (b) b.classList.remove('open'); });
 const markQuality = () => $$('#o-quality [data-q]').forEach(b => b.classList.toggle('sel', b.dataset.q === S.quality));
 $('#o-quality').addEventListener('click', e => { const b = e.target.closest('[data-q]'); if (!b) return; S.quality = b.dataset.q; save(); markQuality(); applyQuality(); });
 markQuality();
@@ -527,7 +510,6 @@ function launch(o) {
     onEnd: (res) => showResults(res),
   });
   game.onPause = () => pause(true);
-  addSoundControl();
 }
 
 function endGameCleanup() {
