@@ -81,6 +81,7 @@ export class Audio {
       case 'hop': this.osc('sine', 300, 500, 0.08, 0.12 * v); break;
       case 'land': this.osc('sine', 120, 50, 0.15, Math.min(0.5, 0.2 + opt * 0.02) * v); this.noise(0.12, 0.15 * v, 'lowpass', 900, 200); break;
       case 'bump': this.osc('sine', 150, 50, 0.18, 0.4 * v); this.noise(0.12, 0.3 * v, 'bandpass', 800, 300); break;
+      case 'boing': { const k = 0.6 + opt * 0.4; this.osc('sine', 140, 420 * k, 0.12, 0.45 * v); this.osc('sine', 420 * k, 180, 0.28, 0.3 * v, 0.1); this.osc('triangle', 300, 900 * k, 0.1, 0.08 * v); this.noise(0.08, 0.18 * v, 'lowpass', 900, 300); break; }
       case 'drift': this.osc('triangle', 700 + opt * 250, 900 + opt * 300, 0.12, 0.12 * v); break;
       case 'count': this.osc('square', 520, 520, 0.18, 0.18 * v); break;
       case 'go': this.osc('square', 1040, 1040, 0.5, 0.2 * v); this.osc('square', 1560, 1560, 0.5, 0.08 * v); break;

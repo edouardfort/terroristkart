@@ -11,6 +11,7 @@ const TURBO_TIME = [0, 0.6, 1.0, 1.5];
 export const DRIFT_COLORS = ['#ffffff', '#4dc3ff', '#ff9a1a', '#d35cff'];
 
 const v3 = new THREE.Vector3();
+const impact_k = fdn => 4 + (-fdn) * 6;
 const lerpAngle = (a, b, t) => { let d = ((b - a + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI; return a + d * t; };
 export const wrapAngle = a => ((a + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
 
@@ -161,11 +162,32 @@ export class Kart {
     this.pos.x += this.vel.x * dt; this.pos.z += this.vel.z * dt;
     const n = map.collide(this.pos, KART_R, this.pos.y);
     if (n) {
+      // Bumpers : on rebondit franchement et le kart est réorienté le long du mur pour ne jamais rester coincé
       const vn = this.vel.x * n.nx + this.vel.z * n.nz;
       if (vn < 0) {
-        this.vel.x -= n.nx * vn * 1.35; this.vel.z -= n.nz * vn * 1.35;
-        this.vel.x *= 0.92; this.vel.z *= 0.92;
-        if (-vn > 9 && this.wallHit <= 0) { this.wallHit = 0.25; this.game.onKartEvent(this, 'bump', -vn); if (this.drift) { this.drift = 0; this.driftCharge = 0; this.driftLevel = 0; } }
+        const impact = -vn;
+        const rest = impact > 3 ? 0.85 : 0.2;
+        this.vel.x -= n.nx * vn * (1 + rest); this.vel.z -= n.nz * vn * (1 + rest);
+        if (impact > 3) {
+          const out = this.vel.x * n.nx + this.vel.z * n.nz;
+          if (out < 7) { this.vel.x += n.nx * (7 - out); this.vel.z += n.nz * (7 - out); }
+        }
+        this.vel.x *= 0.95; this.vel.z *= 0.95;
+        if (impact > 6 && this.wallHit <= 0) {
+          this.wallHit = 0.25; this.vis.sqV += Math.min(5, impact * 0.2);
+          this.game.onKartEvent(this, 'bump', impact, n);
+          if (this.drift) { this.drift = 0; this.driftCharge = 0; this.driftLevel = 0; }
+        }
+      }
+      // face au mur : on pivote vers le côté le plus proche
+      const ffx = Math.sin(this.yaw), ffz = Math.cos(this.yaw), fdn = ffx * n.nx + ffz * n.nz;
+      if (fdn < -0.15 && this.spin <= 0 && !this.dead) {
+        let tx = -n.nz, tz = n.nx;
+        if (tx * ffx + tz * ffz < 0) { tx = -tx; tz = -tz; }
+        const target = Math.atan2(tx + n.nx * 0.5, tz + n.nz * 0.5);
+        // gros choc : on dévie d'un coup (effet flipper) ; sinon on glisse doucement le long du mur
+        const hard = vn < -6 ? 0.85 : 0;
+        this.yaw = lerpAngle(this.yaw, target, Math.max(hard, Math.min(1, dt * impact_k(fdn))));
       }
     }
     this.wallHit -= dt;

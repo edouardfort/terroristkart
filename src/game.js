@@ -440,7 +440,7 @@ export class Game {
   }
 
   // ------------------------------------------------------------------ retours du kart (sons, fx)
-  onKartEvent(k, type, val) {
+  onKartEvent(k, type, val, n) {
     const vol = this.volAt(k.pos, k);
     const lp = this.locals.find(l => l.kart === k);
     switch (type) {
@@ -450,9 +450,14 @@ export class Game {
         for (let i = 0; i < 10; i++) { const a = i / 10 * Math.PI * 2; this.fx.alpha.spawn(k.pos.x + Math.sin(a), k.pos.y + 0.2, k.pos.z + Math.cos(a), Math.sin(a) * 5, 1, Math.cos(a) * 5, 0.5, 0.8, 1.8, '#ffffff', 0.5, 3, 0); }
         if (lp && val > 14) { lp.cs.trauma = Math.min(1, lp.cs.trauma + 0.25); this.input.rumble(lp.device, 0.4, 0.2, 90); }
         break;
-      case 'bump':
-        this.audio.play('bump', vol);
-        this.fx.burst(k.pos.clone().setY(k.pos.y + 0.8), '#ffffff', 8, 6);
+      case 'bump': {
+        this.audio.play('boing', vol, Math.min(1, val / 30));
+        const hit = n ? k.pos.clone().addScaledVector(new THREE.Vector3(-n.nx, 0, -n.nz), 1.3).setY(k.pos.y + 0.6) : k.pos.clone().setY(k.pos.y + 0.8);
+        this.fx.burst(hit, '#ffe14d', 10, 7);
+        this.fx.burst(hit, '#ff4d6d', 6, 5);
+        if (val > 14) this.fx.ring(hit, 2.2, '#ffffff', 0.25);
+        this.map.flashBumper && this.map.flashBumper(hit);
+      }
         if (lp) { lp.cs.trauma = Math.min(1, lp.cs.trauma + 0.2); this.input.rumble(lp.device, 0.5, 0.3, 100); }
         break;
       case 'boostpad': this.audio.play('boostpad', vol); if (lp) this.hud.speedBurst(lp); break;

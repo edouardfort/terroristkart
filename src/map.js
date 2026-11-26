@@ -485,6 +485,36 @@ export class GameMap {
       crowd.instanceMatrix.needsUpdate = true;
     });
 
+    // Bumpers rayés rouge / blanc au pied des murs et du plateau
+    const stripeTex = canvasTex(16, 64, (ctx) => {
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, 16, 64);
+      ctx.fillStyle = '#ff3b5c'; ctx.fillRect(0, 0, 16, 32);
+    }, true);
+    this.bumpers = [];
+    const bumperGeo = new THREE.CylinderGeometry(0.55, 0.55, 1, 14, 1);
+    const addBumper = (x0, z0, x1, z1, y) => {
+      const len = Math.hypot(x1 - x0, z1 - z0);
+      const t = stripeTex.clone(); t.needsUpdate = true; t.repeat.set(1, len / 2.4);
+      const mat = new THREE.MeshToonMaterial({ map: t, gradientMap: toon('#fff').gradientMap, emissive: '#000000' });
+      const m = new THREE.Mesh(bumperGeo, mat);
+      m.scale.set(1, len, 1); m.position.set((x0 + x1) / 2, y + 0.55, (z0 + z1) / 2);
+      m.rotation.set(Math.PI / 2, 0, 0); m.rotation.y = 0;
+      if (Math.abs(x1 - x0) > Math.abs(z1 - z0)) { m.rotation.set(0, 0, Math.PI / 2); }
+      else { m.rotation.set(Math.PI / 2, 0, 0); }
+      m.castShadow = true; m.receiveShadow = true; g.add(m);
+      this.bumpers.push({ m, mat, x0, z0, x1, z1, y, glow: 0 });
+    };
+    const W = H - 0.55;
+    addBumper(-W, -W, W, -W, 0); addBumper(-W, W, W, W, 0); addBumper(-W, -W, -W, W, 0); addBumper(W, -W, W, W, 0);
+    const PB = 18.55;
+    for (const s of [1, -1]) {
+      addBumper(-PB, s * PB, -5, s * PB, 0); addBumper(5, s * PB, PB, s * PB, 0);
+      addBumper(s * PB, -PB, s * PB, -5, 0); addBumper(s * PB, 5, s * PB, PB, 0);
+    }
+    this.anim.push((dt) => {
+      for (const b of this.bumpers) if (b.glow > 0) { b.glow = Math.max(0, b.glow - dt * 3); b.mat.emissive.setRGB(b.glow, b.glow * 0.8, b.glow * 0.2); }
+    });
+
     // Bannières sur les murs
     const bannerTex = canvasTex(1024, 128, (ctx) => {
       const gr = ctx.createLinearGradient(0, 0, 0, 128); gr.addColorStop(0, '#5a2dff'); gr.addColorStop(1, '#ff3d9a');
@@ -533,6 +563,19 @@ export class GameMap {
       c.lookAt(0, c.position.y, 0); clouds.add(c);
     }
     this.anim.push((dt) => { clouds.rotation.y += dt * 0.008; });
+  }
+
+  // Fait briller le bumper le plus proche d'un choc
+  flashBumper(p) {
+    let best = null, bd = 4;
+    for (const b of this.bumpers || []) {
+      if (Math.abs(p.y - b.y - 0.6) > 2.5) continue;
+      const dx = b.x1 - b.x0, dz = b.z1 - b.z0, l2 = dx * dx + dz * dz;
+      const t = Math.max(0, Math.min(1, ((p.x - b.x0) * dx + (p.z - b.z0) * dz) / l2));
+      const d = Math.hypot(p.x - (b.x0 + dx * t), p.z - (b.z0 + dz * t));
+      if (d < bd) { bd = d; best = b; }
+    }
+    if (best) best.glow = 1;
   }
 
   rampGeometry(b) {

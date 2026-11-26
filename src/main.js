@@ -1,7 +1,7 @@
 // TerroristKart : démarrage, menus, garage, lobby (local + en ligne), lancement des parties, résultats.
 import * as THREE from 'three';
 import { CHARACTERS, PAINTS, charById, paintById, buildKart, buildHead, toon, G } from './characters.js';
-import { Input, DEVICE_LABEL, IS_TOUCH, TouchControls } from './input.js';
+import { Input, DEVICE_LABEL, IS_TOUCH, TouchControls, ACTIONS, PAD_ACTIONS, DEFAULT_BINDS, setBindings, currentBinds, keyLabel, padLabel } from './input.js';
 import { Audio } from './audio.js';
 import { Game } from './game.js';
 import { Net } from './net.js';
@@ -228,6 +228,68 @@ $('#p-mute').addEventListener('click', toggleMute);
 addEventListener('keydown', e => { if (e.code === 'KeyM' && game && !(e.target && e.target.tagName === 'INPUT')) toggleMute(); });
 setVol(S.music, S.sfx);
 
+// ------------------------------------------------------------------ touches
+setBindings(S.binds);
+const ACTION_LABEL = { up: 'Accélérer', down: 'Freiner / reculer', left: 'Tourner à gauche', right: 'Tourner à droite', fire: 'Tirer', drift: 'Sauter / drift', look: 'Regarder derrière' };
+let capture = null;   // { dev, act, el, padPrev }
+function renderKeys() {
+  const b = currentBinds();
+  const cell = (dev, act) => {
+    if (dev === 'pad' && !PAD_ACTIONS.includes(act)) return '<span class="bind-fixed">Stick / croix</span>';
+    const list = b[dev][act] || [];
+    const main = dev === 'pad' ? padLabel(list[0]) : keyLabel(list[0]);
+    const more = list.length > 1 ? `<small>+${list.length - 1}</small>` : '';
+    return `<button class="bind" data-dev="${dev}" data-act="${act}" data-nav>${esc(main)}${more}</button>`;
+  };
+  $('#keys-grid').innerHTML = '<span class="kh"></span><span class="kh">Clavier joueur 1</span><span class="kh">Clavier joueur 2</span><span class="kh">Manette</span>'
+    + ACTIONS.map(a => `<span class="ka">${ACTION_LABEL[a]}</span>${cell('kbL', a)}${cell('kbR', a)}${cell('pad', a)}`).join('');
+}
+function saveBinds(next) { S.binds = next; save(); setBindings(next); renderKeys(); }
+function assign(dev, act, value) {
+  const b = JSON.parse(JSON.stringify(currentBinds()));
+  const old = b[dev][act];
+  // si la touche servait déjà ailleurs dans la même colonne, on échange
+  for (const a of Object.keys(b[dev])) {
+    if (a === act) continue;
+    if (b[dev][a].includes(value)) { b[dev][a] = b[dev][a].filter(v => v !== value); if (!b[dev][a].length) b[dev][a] = old.filter(v => v !== value).slice(0, 1); }
+  }
+  b[dev][act] = [value];
+  saveBinds(b);
+  audio.play('ok', 0.7);
+}
+function startCapture(el) {
+  stopCapture();
+  const dev = el.dataset.dev, act = el.dataset.act;
+  capture = { dev, act };
+  el.classList.add('listening'); el.textContent = dev === 'pad' ? 'Appuie sur un bouton…' : 'Appuie sur une touche…';
+  capture.padPrev = input.pads.map(p => p ? p.buttons.map(x => x.pressed) : []);
+  $('#keys-status').textContent = 'Échap pour annuler';
+}
+function stopCapture() { capture = null; $('#keys-status').textContent = ''; renderKeys(); }
+$('#keys-grid').addEventListener('click', e => { const b = e.target.closest('.bind'); if (b) startCapture(b); });
+addEventListener('keydown', e => {
+  if (!capture || capture.dev === 'pad') { if (capture && e.code === 'Escape') { e.preventDefault(); stopCapture(); } return; }
+  e.preventDefault(); e.stopImmediatePropagation();
+  if (e.code === 'Escape') return stopCapture();
+  const { dev, act } = capture; capture = null; $('#keys-status').textContent = '';
+  assign(dev, act, e.code);
+}, true);
+function pollPadCapture() {
+  if (!capture || capture.dev !== 'pad') return;
+  input.pads.forEach((p, i) => {
+    if (!p || !capture) return;
+    p.buttons.forEach((bt, j) => {
+      if (!capture || j === 9) return;
+      const was = capture.padPrev[i] && capture.padPrev[i][j];
+      if (bt.pressed && !was) { const { act } = capture; capture = null; $('#keys-status').textContent = ''; assign('pad', act, j); }
+    });
+    if (capture) capture.padPrev[i] = p.buttons.map(x => x.pressed);
+  });
+}
+$('#keys-reset').addEventListener('click', () => { saveBinds(null); toast('Touches par défaut rétablies'); });
+addEventListener('gamepadconnected', e => toast(`Manette détectée : ${String(e.gamepad.id).replace(/\(.*\)/, '').trim().slice(0, 40) || 'manette'}`, 3000));
+addEventListener('gamepaddisconnected', () => toast('Manette déconnectée', 2500));
+
 const markQuality = () => $$('#o-quality [data-q]').forEach(b => b.classList.toggle('sel', b.dataset.q === S.quality));
 $('#o-quality').addEventListener('click', e => { const b = e.target.closest('[data-q]'); if (!b) return; S.quality = b.dataset.q; save(); markQuality(); applyQuality(); });
 markQuality();
@@ -252,10 +314,13 @@ function enterLobby(mode) {
   show('lobby');
   audio.music('menu');
 }
+// Première manette déjà repérée par le navigateur (il faut parfois appuyer sur un bouton pour qu'elle apparaisse)
+function connectedPad() { const i = input.pads.findIndex(p => p && p.connected !== false); return i >= 0 ? 'gp' + i : null; }
 function addSlot(device, first = false) {
+  if (first && !device.startsWith('gp')) device = connectedPad() || device;
   if (lobby.slots.length >= 4 || lobby.slots.some(s => s.device === device)) return;
   const i = lobby.slots.length;
-  const s = { device, char: first ? S.char : freeChar(lobby.slots.map(x => x.char).concat(S.char)), paint: first ? S.paint : PAINTS[(PAINTS.findIndex(p => p.id === S.paint) + i * 2) % PAINTS.length].id, name: first ? S.name : `Joueur ${i + 1}`, ready: false, nav: false };
+  const s = { device, char: first ? S.char : freeChar(lobby.slots.map(x => x.char).concat(S.char)), paint: first ? S.paint : PAINTS[(PAINTS.findIndex(p => p.id === S.paint) + i * 2) % PAINTS.length].id, name: first ? S.name : `Joueur ${i + 1}`, ready: false, nav: false, auto: first && !device.startsWith('gp') };
   lobby.slots.push(s);
   audio.play('ok', 0.8);
   renderSlots(); refreshMenuKarts(); hopKart(i); syncSlots();
@@ -317,6 +382,10 @@ function leaveLobby() {
 
 function lobbyMenuEvent(ev) {
   const i = lobby.slots.findIndex(s => s.device === ev.device);
+  // une manette qui se manifeste prend la place de J1 si J1 n'a été attribué qu'automatiquement au clavier / tactile
+  if (i < 0 && ev.device.startsWith('gp') && (ev.type === 'confirm' || ev.type === 'start') && lobby.slots[0] && lobby.slots[0].auto) {
+    lobby.slots[0].device = ev.device; lobby.slots[0].auto = false; audio.play('ok', 0.8); renderSlots(); hopKart(0); toast('Manette ' + (Number(ev.device.slice(2)) + 1) + ' = J1'); return;
+  }
   if (ev.type === 'start') { if (i < 0) addSlot(ev.device); else startFromLobby(); return; }
   if (i < 0) { if (ev.type === 'confirm') addSlot(ev.device); else if (ev.type === 'back' && lobby.slots.length === 0) leaveLobby(); return; }
   const s = lobby.slots[i];
@@ -577,7 +646,8 @@ function frame(now) {
     game.update(dt);
     return;
   }
-  for (const ev of evs) handleMenuEvent(ev);
+  pollPadCapture();
+  if (!capture) for (const ev of evs) handleMenuEvent(ev);
   renderMenu(dt);
 }
 function handleMenuEvent(ev) {
@@ -603,6 +673,7 @@ async function boot() {
   try { await document.fonts.load('40px "Lilita One"'); } catch (e) { /* police de secours */ }
   makePortraits();
   buildGarage();
+  renderKeys();
   updateTitleSkin();
   show('title', false);
   audio.music('menu');

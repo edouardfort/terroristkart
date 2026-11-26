@@ -1,9 +1,45 @@
 // Entrées : clavier (deux moitiés possibles) et manettes. Fournit l'état de conduite et des événements de menu.
-const KB = {
-  kbL: { up: ['KeyW'], down: ['KeyS'], left: ['KeyA'], right: ['KeyD'], fire: ['Space', 'KeyE'], drift: ['ShiftLeft', 'KeyQ'], look: ['KeyC'], confirm: ['Space'], back: ['Escape'] },
-  kbR: { up: ['ArrowUp'], down: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'], fire: ['Enter', 'NumpadEnter', 'ControlRight', 'KeyL'], drift: ['ShiftRight', 'Numpad0', 'KeyK'], look: ['Numpad1', 'KeyJ'], confirm: ['Enter', 'NumpadEnter'], back: ['Backspace'] },
+// Touches par défaut (codes physiques : KeyW = Z sur un clavier AZERTY). Modifiables dans Options → Touches.
+export const ACTIONS = ['up', 'down', 'left', 'right', 'fire', 'drift', 'look'];
+export const PAD_ACTIONS = ['up', 'down', 'fire', 'drift', 'look'];
+export const DEFAULT_BINDS = {
+  kbL: { up: ['KeyW'], down: ['KeyS'], left: ['KeyA'], right: ['KeyD'], fire: ['Space', 'KeyE'], drift: ['ShiftLeft', 'KeyQ'], look: ['KeyC'] },
+  kbR: { up: ['ArrowUp'], down: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'], fire: ['Enter', 'NumpadEnter', 'ControlRight', 'KeyL'], drift: ['ShiftRight', 'Numpad0', 'KeyK'], look: ['Numpad1', 'KeyJ'] },
+  pad: { up: [7, 0], down: [6, 1], fire: [4, 2], drift: [5], look: [3] },
 };
-KB.kb = Object.fromEntries(Object.keys(KB.kbL).map(k => [k, [...new Set([...KB.kbL[k], ...KB.kbR[k]])]]));
+const KB = {};
+let PAD = {};
+export function setBindings(b) {
+  const src = b || {};
+  for (const d of ['kbL', 'kbR']) {
+    KB[d] = {};
+    for (const a of ACTIONS) KB[d][a] = (src[d] && src[d][a] && src[d][a].length ? src[d][a] : DEFAULT_BINDS[d][a]).slice();
+  }
+  KB.kbL.confirm = ['Space']; KB.kbL.back = ['Escape'];
+  KB.kbR.confirm = ['Enter', 'NumpadEnter']; KB.kbR.back = ['Backspace'];
+  KB.kb = Object.fromEntries(Object.keys(KB.kbL).map(k => [k, [...new Set([...KB.kbL[k], ...KB.kbR[k]])]]));
+  PAD = {};
+  for (const a of PAD_ACTIONS) PAD[a] = (src.pad && src.pad[a] && src.pad[a].length ? src.pad[a] : DEFAULT_BINDS.pad[a]).slice();
+}
+export const currentBinds = () => ({ kbL: KB.kbL, kbR: KB.kbR, pad: PAD });
+setBindings(null);
+
+const KEY_NAMES = { Space: 'Espace', ShiftLeft: 'Shift G', ShiftRight: 'Shift D', ControlLeft: 'Ctrl G', ControlRight: 'Ctrl D', AltLeft: 'Alt G', AltRight: 'Alt D',
+  MetaLeft: 'Cmd G', MetaRight: 'Cmd D', Enter: 'Entrée', NumpadEnter: 'Entrée pavé', Backspace: 'Retour', Tab: 'Tab', CapsLock: 'Verr. maj',
+  ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Escape: 'Échap' };
+let layoutMap = null;
+try { navigator.keyboard?.getLayoutMap?.().then(m => { layoutMap = m; }).catch(() => {}); } catch (e) { /* pas d'API clavier */ }
+export function keyLabel(code) {
+  if (!code) return '—';
+  if (KEY_NAMES[code]) return KEY_NAMES[code];
+  if (layoutMap && layoutMap.get(code)) return layoutMap.get(code).toUpperCase();
+  if (code.startsWith('Key')) return code.slice(3);
+  if (code.startsWith('Digit')) return code.slice(5);
+  if (code.startsWith('Numpad')) return 'Pavé ' + code.slice(6);
+  return code;
+}
+export const PAD_NAMES = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'Select', 'Start', 'L3', 'R3', '↑ croix', '↓ croix', '← croix', '→ croix', 'Home'];
+export const padLabel = i => PAD_NAMES[i] || ('Bouton ' + i);
 
 export const DEVICE_LABEL = id => id === 'touch' ? 'Écran tactile' : id === 'kbL' ? 'Clavier ZQSD' : id === 'kbR' ? 'Clavier flèches' : id === 'kb' ? 'Clavier' : 'Manette ' + (Number(id.slice(2)) + 1);
 export const IS_TOUCH = (typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches) || 'ontouchstart' in window || new URLSearchParams(location.search).has('touch');
@@ -107,10 +143,12 @@ export class Input {
       ax = Math.sign(ax) * Math.pow(Math.abs(ax), 1.3);
       if (pressed(14)) ax = -1; if (pressed(15)) ax = 1;
       o.steer = ax;
-      o.throttle = Math.max(b(7), b(0)) - Math.max(b(6), b(1));
-      o.drift = pressed(5);
-      o.fire = pressed(4) || pressed(2);
-      o.look = pressed(3);
+      const val = list => list.reduce((m, i) => Math.max(m, b(i)), 0);
+      const any = list => list.some(pressed);
+      o.throttle = val(PAD.up) - val(PAD.down);
+      o.drift = any(PAD.drift);
+      o.fire = any(PAD.fire);
+      o.look = any(PAD.look);
       o.pause = pressed(9);
     }
     return o;
