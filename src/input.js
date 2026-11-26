@@ -5,7 +5,58 @@ const KB = {
 };
 KB.kb = Object.fromEntries(Object.keys(KB.kbL).map(k => [k, [...new Set([...KB.kbL[k], ...KB.kbR[k]])]]));
 
-export const DEVICE_LABEL = id => id === 'kbL' ? 'Clavier ZQSD' : id === 'kbR' ? 'Clavier flèches' : id === 'kb' ? 'Clavier' : 'Manette ' + (Number(id.slice(2)) + 1);
+export const DEVICE_LABEL = id => id === 'touch' ? 'Écran tactile' : id === 'kbL' ? 'Clavier ZQSD' : id === 'kbR' ? 'Clavier flèches' : id === 'kb' ? 'Clavier' : 'Manette ' + (Number(id.slice(2)) + 1);
+export const IS_TOUCH = (typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches) || 'ontouchstart' in window || new URLSearchParams(location.search).has('touch');
+
+// Commandes tactiles : joystick flottant à gauche (direction, tirer vers le bas = freiner), boutons à droite.
+// L'accélération est automatique.
+export class TouchControls {
+  constructor(root) {
+    this.root = root;
+    this.s = { steer: 0, brake: false, fire: false, drift: false, look: false, pause: false };
+    const zone = root.querySelector('.t-zone'), base = root.querySelector('.t-base'), knob = root.querySelector('.t-knob');
+    let id = null, cx = 0, cy = 0;
+    const R = 62;
+    const move = e => {
+      if (e.pointerId !== id) return;
+      let dx = e.clientX - cx, dy = e.clientY - cy;
+      const l = Math.hypot(dx, dy); if (l > R) { dx *= R / l; dy *= R / l; }
+      knob.style.transform = `translate(${dx}px, ${dy}px)`;
+      let st = dx / R; st = Math.abs(st) < 0.1 ? 0 : Math.sign(st) * (Math.abs(st) - 0.1) / 0.9;
+      this.s.steer = st; this.s.brake = dy / R > 0.6;
+    };
+    zone.addEventListener('pointerdown', e => {
+      if (id !== null) return;
+      id = e.pointerId; try { zone.setPointerCapture(id); } catch (err) { /* rien */ }
+      cx = e.clientX; cy = e.clientY;
+      base.style.left = cx + 'px'; base.style.top = cy + 'px'; base.classList.add('on');
+      move(e); e.preventDefault();
+    });
+    zone.addEventListener('pointermove', move);
+    const end = e => {
+      if (e.pointerId !== id) return;
+      id = null; this.s.steer = 0; this.s.brake = false;
+      knob.style.transform = ''; base.classList.remove('on'); base.style.left = ''; base.style.top = '';
+    };
+    zone.addEventListener('pointerup', end); zone.addEventListener('pointercancel', end);
+    const hold = (sel, key) => {
+      const el = root.querySelector(sel);
+      el.addEventListener('pointerdown', e => {
+        try { el.setPointerCapture(e.pointerId); } catch (err) { /* rien */ }
+        this.s[key] = true; el.classList.add('down'); e.preventDefault();
+        if (navigator.vibrate) navigator.vibrate(8);
+      });
+      const up = () => { this.s[key] = false; el.classList.remove('down'); };
+      el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up); el.addEventListener('lostpointercapture', up);
+    };
+    hold('.t-fire', 'fire'); hold('.t-drift', 'drift'); hold('.t-look', 'look'); hold('.t-pause', 'pause');
+    root.addEventListener('contextmenu', e => e.preventDefault());
+  }
+  show(on) {
+    this.root.classList.toggle('on', on);
+    if (!on) Object.assign(this.s, { steer: 0, brake: false, fire: false, drift: false, look: false, pause: false });
+  }
+}
 
 export class Input {
   constructor() {
@@ -13,6 +64,7 @@ export class Input {
     this.mouse = false;
     this.prevMenu = {};
     this.pads = [];
+    this.touch = null;
     addEventListener('keydown', e => {
       if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
       this.keys.add(e.code);
@@ -35,7 +87,11 @@ export class Input {
   // État brut de conduite pour un appareil
   drive(device) {
     const o = { throttle: 0, steer: 0, drift: false, fire: false, look: false, pause: false };
-    if (device.startsWith('kb')) {
+    if (device === 'touch') {
+      const t = this.touch ? this.touch.s : {};
+      o.throttle = t.brake ? -1 : 1; o.steer = t.steer || 0;
+      o.drift = !!t.drift; o.fire = !!t.fire; o.look = !!t.look; o.pause = !!t.pause;
+    } else if (device.startsWith('kb')) {
       const m = KB[device];
       o.throttle = (this.key(m.up) ? 1 : 0) - (this.key(m.down) ? 1 : 0);
       o.steer = (this.key(m.right) ? 1 : 0) - (this.key(m.left) ? 1 : 0);

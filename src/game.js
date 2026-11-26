@@ -158,7 +158,10 @@ export class Game {
     if (e.t === 'pick') {
       const k = this.kartById.get(e.k), b = this.boxes[e.i];
       if (!k || k.owner !== pid || !b || !b.active || k.dead) return;
-      if (k.pos.distanceTo(b.pos) > 5) return;
+      // l'hôte voit les karts distants avec un peu de retard : on accepte aussi la position annoncée par le client
+      const seen = k.pos.distanceTo(b.pos);
+      const told = Number.isFinite(e.x) ? Math.hypot(e.x - b.pos.x, e.y + 0.9 - b.pos.y, e.z - b.pos.z) : Infinity;
+      if (Math.min(told < 3.5 && seen < 25 ? 0 : Infinity, seen) > 6.5) return;
       b.respawnAt = this.time + 4.5;
       this.emit({ t: 'box', i: e.i, on: 0, k: k.id });
       if (!k.weapon && k.roll <= 0) this.emit({ t: 'give', k: k.id, w: rollWeapon() });
@@ -622,7 +625,7 @@ export class Game {
       if (!k.isLocal || k.dead) continue;
       for (const b of this.boxes) {
         if (!b.active || b.pending > this.time) continue;
-        if (Math.hypot(k.pos.x - b.pos.x, k.pos.y + 0.9 - b.pos.y, k.pos.z - b.pos.z) < 2.3) { b.pending = this.time + 0.5; this.request({ t: 'pick', k: k.id, i: b.i }); }
+        if (Math.hypot(k.pos.x - b.pos.x, k.pos.y + 0.9 - b.pos.y, k.pos.z - b.pos.z) < 2.3) { b.pending = this.time + 0.5; this.request({ t: 'pick', k: k.id, i: b.i, x: +k.pos.x.toFixed(2), y: +k.pos.y.toFixed(2), z: +k.pos.z.toFixed(2) }); }
       }
     }
   }

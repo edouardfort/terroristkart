@@ -65,7 +65,8 @@ export class HUD {
     }
     const m = this.mini.style;
     m.top = m.left = m.right = m.bottom = m.transform = '';
-    if (n <= 1) { m.left = '18px'; m.bottom = '18px'; m.width = m.height = '190px'; }
+    if (document.body.classList.contains('touch-play')) { m.right = 'calc(16px + env(safe-area-inset-right, 0px))'; m.top = '64px'; m.width = m.height = '108px'; }
+    else if (n <= 1) { m.left = '18px'; m.bottom = '18px'; m.width = m.height = '190px'; }
     else if (n === 2) { m.right = '14px'; m.top = '50%'; m.transform = 'translateY(-50%)'; m.width = m.height = '150px'; }
     else if (overview) { m.left = (overview[0] + overview[2] / 2) + 'px'; m.top = (overview[1] + overview[3] / 2) + 'px'; m.transform = 'translate(-50%,-50%)'; m.width = m.height = Math.min(overview[3] * 0.8, 260) + 'px'; }
     else { m.left = '50%'; m.top = '50%'; m.transform = 'translate(-50%,-50%)'; m.width = m.height = '140px'; }

@@ -1,7 +1,7 @@
 // TerroristKart : démarrage, menus, garage, lobby (local + en ligne), lancement des parties, résultats.
 import * as THREE from 'three';
 import { CHARACTERS, PAINTS, charById, paintById, buildKart, buildHead, toon, G } from './characters.js';
-import { Input, DEVICE_LABEL } from './input.js';
+import { Input, DEVICE_LABEL, IS_TOUCH, TouchControls } from './input.js';
 import { Audio } from './audio.js';
 import { Game } from './game.js';
 import { Net } from './net.js';
@@ -12,7 +12,7 @@ const $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // ------------------------------------------------------------------ réglages
-const DEFAULTS = { name: '', char: 'matou', paint: 'rouge', music: 0.5, sfx: 0.8, quality: 'medium', bots: 5, duration: 3, difficulty: 'normal' };
+const DEFAULTS = { name: '', char: 'matou', paint: 'rouge', music: 0.5, sfx: 0.8, quality: IS_TOUCH ? 'low' : 'medium', bots: 5, duration: 3, difficulty: 'normal' };
 const S = Object.assign({}, DEFAULTS, (() => { try { return JSON.parse(localStorage.getItem('terroristkart') || '{}'); } catch (e) { return {}; } })());
 if (!S.name) S.name = ['Turbo', 'Nitro', 'Boum', 'Zigzag', 'Pneu', 'Vroum'][Math.floor(Math.random() * 6)] + Math.floor(Math.random() * 90 + 10);
 const save = () => { try { localStorage.setItem('terroristkart', JSON.stringify(S)); } catch (e) { /* stockage indisponible */ } };
@@ -31,7 +31,9 @@ applyQuality();
 const input = new Input();
 const audio = new Audio();
 audio.setVolumes(S.music, S.sfx);
-let game = null, net = null, lastDevice = 'kbL';
+let game = null, net = null, lastDevice = IS_TOUCH ? 'touch' : 'kbL';
+input.touch = new TouchControls($('#touch'));
+addEventListener('pointerdown', e => { if (e.pointerType === 'touch') lastDevice = 'touch'; }, true);
 const unlockAudio = () => { audio.init(); };
 addEventListener('pointerdown', unlockAudio); addEventListener('keydown', unlockAudio);
 
@@ -180,7 +182,7 @@ function activate(e) {
 document.addEventListener('mouseover', e => { const t = e.target.closest('[data-nav]'); if (t && navables().includes(t)) setFocus(t); });
 document.addEventListener('click', e => {
   const t = e.target.closest('button');
-  if (t) { audio.init(); audio.play('ok', 0.6); lastDevice = lastDevice.startsWith('gp') ? lastDevice : 'kbL'; }
+  if (t) { audio.init(); audio.play('ok', 0.6); if (!lastDevice.startsWith('gp') && lastDevice !== 'touch') lastDevice = 'kbL'; }
   const go = e.target.closest('[data-go]'); if (go) show(go.dataset.go);
   if (e.target.closest('[data-back]')) back();
 });
@@ -471,6 +473,13 @@ function launch(o) {
   document.body.classList.add('ingame');
   for (const k of menu.karts) menu.scene.remove(k.g);
   menu.karts = [];
+  const touch = o.locals.some(l => l.device === 'touch');
+  document.body.classList.toggle('touch-play', touch);
+  input.touch.show(touch);
+  if (touch) {
+    const de = document.documentElement;
+    if (!document.fullscreenElement && de.requestFullscreen) de.requestFullscreen().then(() => window.screen.orientation?.lock?.("landscape")).catch(() => {});
+  }
   game = new Game({
     renderer, audio, input, net: o.net || null, isHost: o.isHost, myPeer: o.myPeer, peerTag: o.peerTag,
     settings: { duration: o.settings ? o.settings.duration : S.duration * 60, difficulty: o.settings ? o.settings.difficulty : S.difficulty, quality: S.quality },
@@ -483,7 +492,8 @@ function launch(o) {
 function endGameCleanup() {
   if (!game) return;
   game.dispose(); game = null;
-  document.body.classList.remove('ingame');
+  document.body.classList.remove('ingame', 'touch-play');
+  input.touch.show(false);
   lobby.busy = false;
   renderer.setClearColor(0x000000, 0);
 }
@@ -491,6 +501,7 @@ function endGameCleanup() {
 function pause(on) {
   if (!game) return;
   game.paused = on;
+  input.touch.show(!on && document.body.classList.contains('touch-play'));
   if (on) { show('pause', false); $('#b-quit').textContent = net ? 'QUITTER LE SALON' : 'QUITTER LA PARTIE'; }
   else { $$('.screen').forEach(s => s.classList.remove('active')); screen = null; }
 }
